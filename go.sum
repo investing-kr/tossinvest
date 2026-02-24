@@ -1,0 +1,6 @@
+github.com/coder/websocket v1.8.14 h1:9L0p0iKiNOibykf283eHkKUHHrpG7f65OE3BhhO7v9g=
+github.com/coder/websocket v1.8.14/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
+github.com/xtdlib/chttp v0.0.0-20260224152155-c8a19bbae4d1 h1:y22gRqb4QSEgJdGz3lCEME8nvG1sTu3ah0Z6WzhWEhA=
+github.com/xtdlib/chttp v0.0.0-20260224152155-c8a19bbae4d1/go.mod h1:Dp9ubfn/OnbcnkscyxcqDDBJZmtp+IJP63/i3L6QMzM=
+github.com/xtdlib/rat v0.0.0-20260110121614-1dc662dee071 h1:4tKr7IyGo4vkrJYXWRXPfBDx1EGilEGMw2VTY72wIr4=
+github.com/xtdlib/rat v0.0.0-20260110121614-1dc662dee071/go.mod h1:3xhG76BS5CASmufCG6H9YjQ+DspYvdm94DWWoaFxKYQ=
