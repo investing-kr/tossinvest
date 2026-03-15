@@ -36,7 +36,7 @@ func main() {
 	}
 
 	root.PersistentFlags().StringVarP(&output, "output", "o", "", "output format (json)")
-	root.AddCommand(buyCmd(), sellCmd(), hotCmd())
+	root.AddCommand(buyCmd(), sellCmd(), hotCmd(), candlesCmd(), bookCmd(), tickCmd())
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
@@ -133,6 +133,146 @@ func hotCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&tag, "tag", "t", "us", "filter tag (all, us, kr)")
+	return cmd
+}
+
+func resolveCode(ticker string) *tossinvest.StockInfoResponse {
+	info, err := wts.V2StockInfos.CodeOrSymbol(ctx, ticker)
+	if err != nil {
+		panic(err)
+	}
+	return info
+}
+
+func stockMarket(info *tossinvest.StockInfoResponse) string {
+	if info.Currency == "KRW" {
+		return "kr-s"
+	}
+	return "us-s"
+}
+
+func candlesCmd() *cobra.Command {
+	var (
+		interval string
+		count    int
+	)
+	cmd := &cobra.Command{
+		Use:   "candles <ticker>",
+		Short: "Show candle chart data",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			if !strings.Contains(interval, ":") {
+				interval = interval + ":1"
+			}
+			info := resolveCode(args[0])
+			resp, err := wts.V1CChart.Candles(ctx, stockMarket(info), info.Code, interval, count, true)
+			if err != nil {
+				panic(err)
+			}
+			if output == "json" {
+				printJSON(resp)
+				return
+			}
+			fmt.Printf("%s:%s:%s:%s\n", info.Symbol, info.Name, info.Code, interval)
+			for _, c := range resp.Candles {
+				change := (c.Close - c.Open) / c.Open * 100
+				fmt.Printf("%s  O:%-10.2f  H:%-10.2f  L:%-10.2f  C:%-10.2f  V:%-10d  %+.2f%%\n",
+					c.Dt, c.Open, c.High, c.Low, c.Close, c.Volume, change)
+			}
+		},
+	}
+	cmd.Flags().StringVarP(&interval, "interval", "i", "min:1", "interval (day:1, week:1, month:1, min:1, min:5)")
+	cmd.Flags().IntVarP(&count, "count", "c", 20, "number of candles")
+	return cmd
+}
+
+func bookCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "book <ticker>",
+		Short: "Show orderbook",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			info := resolveCode(args[0])
+			resp, err := wts.V3StockPrices.Quotes(ctx, info.Code)
+			if err != nil {
+				panic(err)
+			}
+			if output == "json" {
+				printJSON(resp)
+				return
+			}
+
+			fmt.Printf("%s:%s:%s  Close: %.2f\n", info.Symbol, info.Name, info.Code, resp.Close)
+			fmt.Println()
+
+			// find max volume for bar scaling
+			maxVol := 0
+			for _, v := range resp.SellVolumes {
+				if v > maxVol {
+					maxVol = v
+				}
+			}
+			for _, v := range resp.BuyVolumes {
+				if v > maxVol {
+					maxVol = v
+				}
+			}
+
+			barWidth := 30
+			bar := func(vol int) string {
+				if maxVol == 0 {
+					return ""
+				}
+				n := vol * barWidth / maxVol
+				return strings.Repeat("█", n)
+			}
+
+			// sell side (ask) - highest to lowest
+			fmt.Printf("  %-10s  %8s  %s\n", "ASK", "VOL", "")
+			for i := len(resp.SellPrices) - 1; i >= 0; i-- {
+				fmt.Printf("  %-10.2f  %8d  %s\n", resp.SellPrices[i], resp.SellVolumes[i], bar(resp.SellVolumes[i]))
+			}
+
+			// spread line
+			fmt.Printf("  %s\n", strings.Repeat("─", 50))
+
+			// buy side (bid) - highest to lowest
+			fmt.Printf("  %-10s  %8s  %s\n", "BID", "VOL", "")
+			for i := 0; i < len(resp.BuyPrices); i++ {
+				fmt.Printf("  %-10.2f  %8d  %s\n", resp.BuyPrices[i], resp.BuyVolumes[i], bar(resp.BuyVolumes[i]))
+			}
+
+			fmt.Println()
+			fmt.Printf("  Total Ask: %d  Total Bid: %d\n", resp.SellVolume, resp.BuyVolume)
+		},
+	}
+}
+
+func tickCmd() *cobra.Command {
+	var count int
+	cmd := &cobra.Command{
+		Use:   "tick <ticker>",
+		Short: "Show recent ticks",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			info := resolveCode(args[0])
+			resp, err := wts.V2StockPrices.Ticks(ctx, info.Code, count)
+			if err != nil {
+				panic(err)
+			}
+			if output == "json" {
+				printJSON(resp)
+				return
+			}
+			fmt.Printf("%s:%s:%s\n", info.Symbol, info.Name, info.Code)
+			for _, t := range resp {
+				change := (t.Price - t.Base) / t.Base * 100
+				fmt.Printf("%s  %10.2f  %8.0f  %-4s  %+.2f%%\n",
+					t.Time, t.Price, t.Volume, t.TradeType, change)
+			}
+		},
+	}
+	cmd.Flags().IntVarP(&count, "count", "c", 20, "number of ticks")
 	return cmd
 }
 
